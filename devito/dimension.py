@@ -4,7 +4,8 @@ from cached_property import cached_property
 from devito.arguments import DimensionArgProvider
 from devito.types import Symbol
 
-__all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension', 'SubsampledDimension']
+__all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension',
+           'SubsampledDimension']
 
 
 class Dimension(sympy.Symbol, DimensionArgProvider):
@@ -106,9 +107,10 @@ class TimeDimension(Dimension):
     :param spacing: Optional, symbol for the spacing along this dimension.
     """
 
+
 class DerivedDimension(Dimension):
     is_Derived = True
-    
+
     def __new__(cls, name, parent, **kwargs):
         newobj = sympy.Symbol.__new__(cls, name)
         assert isinstance(parent, Dimension)
@@ -128,7 +130,7 @@ class DerivedDimension(Dimension):
     def spacing(self):
         return self.parent.spacing
 
-    
+
 class SteppingDimension(DerivedDimension):
     """
     Dimension symbol that defines the stepping direction of an
@@ -138,6 +140,7 @@ class SteppingDimension(DerivedDimension):
     :param parent: Parent dimension over which to loop in modulo fashion.
     """
     is_Stepping = True
+
     def __new__(cls, name, parent, **kwargs):
         newobj = super(SteppingDimension, cls).__new__(cls, name, parent, **kwargs)
         newobj.modulo = kwargs.get('modulo', 2)
@@ -155,7 +158,7 @@ class SubsampledDimension(DerivedDimension):
     def __new__(cls, name, parent, **kwargs):
         newobj = super(SubsampledDimension, cls).__new__(cls, name, parent, **kwargs)
         newobj.factor = kwargs.get('factor', 4)
-        return newobj    
+        return newobj
 
     def _hashable_content(self):
         return (self.parent._hashable_content(), self.modulo)
