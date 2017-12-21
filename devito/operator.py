@@ -87,6 +87,8 @@ class Operator(Callable):
         self.input, self.output, self.dimensions = retrieve_symbols(expressions)
         stencils = make_stencils(expressions)
 
+        self.offsets = {d.end_name: v for d, v in retrieve_offsets(stencils).items()}
+
         # Set the direction of time acoording to the given TimeAxis
         for time in [d for d in self.dimensions if d.is_Time]:
             if not time.is_Derived:
