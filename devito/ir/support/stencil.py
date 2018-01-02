@@ -253,8 +253,13 @@ class Stencil(DefaultOrderedDict):
         unchangend, but a new dictionary is produced with potentially different
         keys.
         """
-        return Stencil([(k if k not in mapper else mapper[k], set(v))
-                        for k, v in self.items()])
+        output = Stencil()
+        for k, v in self.items():
+            if k not in mapper:
+                output[k] = v
+            else:
+                output[mapper[k]] = self[mapper[k]]
+        return output
 
     def __eq__(self, other):
         return self.entries == other.entries
