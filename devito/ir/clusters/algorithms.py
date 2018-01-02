@@ -1,20 +1,23 @@
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
-from devito.ir.support import Scope
+from devito.ir.support import Box, Scope
 from devito.ir.clusters.cluster import PartialCluster, ClusterGroup
-from devito.ir.clusters.graph import FlowGraph
 from devito.symbolics import xreplace_indices
 from devito.types import Scalar
-from devito.tools import flatten
+from devito.tools import Bunch, flatten
 
 __all__ = ['clusterize', 'groupby']
 
 
 def groupby(clusters):
     """
-    Given an ordered collection of :class:`PartialCluster` objects, return a
-    (potentially) smaller sequence in which dependence-free PartialClusters with
-    identical stencil have been squashed into a single :class:`PartialCluster`.
+    Group :class:`Cluster`s together to create bigger :class:`Cluster`s
+    (i.e., containing more expressions).
+
+    .. note::
+
+        This function relies on advanced data dependency analysis tools
+        based upon classic Lamport theory.
     """
     clusters = clusters.unfreeze()
 
@@ -28,7 +31,7 @@ def groupby(clusters):
             anti = scope.d_anti.carried() - scope.d_anti.increment
             flow = scope.d_flow - (scope.d_flow.inplace() + scope.d_flow.increment)
             funcs = [i.function for i in anti]
-            if candidate.stencil == c.stencil and\
+            if candidate.ispace == c.ispace and\
                     all(is_local(i, candidate, c, clusters) for i in funcs):
                 # /c/ will be fused into /candidate/. All fusion-induced anti
                 # dependences are eliminated through so called "index bumping and
@@ -179,87 +182,35 @@ def bump_and_contract(targets, source, sink):
     sink.exprs = processed
 
 
-def aggregate(exprs, stencils):
-    """
-    Aggregate consecutive expressions having identical LHS and identical
-    stencil by substituting the earlier with the later ones, in program order.
+def clusterize(exprs):
+    """Group a sequence of :class:`ir.Eq`s into one or more :class:`Cluster`s."""
 
-    Examples
-    ========
-    a[i] = b[i] + 3.
-    a[i] = c[i] + 4. + a[i]
-    >> a[i] = c[i] + 4. + b[i] + 3.
-    """
-    mapper = OrderedDict(zip(exprs, stencils))
+    # Build a dependency graph for the input exprs
+    mapper = {}
+    for i, e1 in enumerate(exprs):
+        trace = [e2 for e2 in exprs[:i] if Scope([e2, e1]).has_dep] + [e1]
+        trace.extend([e2 for e2 in exprs[i+1:] if Scope([e1, e2]).has_dep])
+        mapper[e1] = Bunch(trace=trace, ispace=e1.dspace.negate())
 
-    groups = []
-    last = None
-    for k, v in mapper.items():
-        key = k.lhs, v
-        if key == last:
-            groups[-1].append(k)
-        else:
-            last = key
-            groups.append([k])
-
-    exprs, stencils = [], []
-    for i in groups:
-        top = i[0]
-        if len(i) == 1:
-            exprs.append(top)
-        else:
-            inlining, base = top.args
-            queue = list(i[1:])
-            while queue:
-                base = queue.pop(0).rhs.xreplace({inlining: base})
-            exprs.append(top.func(inlining, base))
-        stencils.append(mapper[top])
-
-    return exprs, stencils
-
-
-def clusterize(exprs, stencils):
-    """
-    Derive :class:`Cluster` objects from an iterable of expressions; a stencil for
-    each expression must be provided.
-    """
-    assert len(exprs) == len(stencils)
-
-    exprs, stencils = aggregate(exprs, stencils)
-
-    # Create a PartialCluster for each sequence of expressions computing a tensor
-    mapper = OrderedDict()
-    g = FlowGraph(exprs)
-    for (k, v), j in zip(g.items(), stencils):
-        if v.is_tensor:
-            exprs = g.trace(k)
-            exprs += tuple(i for i in g.trace(k, readby=True) if i not in exprs)
-            mapper[k] = PartialCluster(exprs, j)
-
-    # Update the PartialClusters' Stencils by looking at the Stencil of the
-    # surrounding PartialClusters.
+    # Derive the iteration spaces
     queue = list(mapper)
     while queue:
         target = queue.pop(0)
 
-        pc = mapper[target]
-        strict_trace = [i.lhs for i in pc.exprs if i.lhs != target]
+        ispaces = [mapper[i].ispace for i in mapper[target].trace]
 
-        stencil = pc.stencil.copy()
-        for i in strict_trace:
-            if i in mapper:
-                stencil = stencil.add(mapper[i].stencil)
+        relaxed_ispace = mapper[target].ispace.intersection(*ispaces)
 
-        if stencil != pc.stencil:
+        if relaxed_ispace != mapper[target].ispace:
             # Something has changed, need to propagate the update
-            pc.stencil = stencil
-            queue.extend([i for i in strict_trace if i not in queue])
+            mapper[target].ispace = relaxed_ispace
+            queue.extend([i for i in mapper[target].trace if i not in queue])
 
-    # Drop all non-output tensors, as computed by other clusters
+    # Include scalar (temporary) expressions
     clusters = ClusterGroup()
-    for target, pc in mapper.items():
-        exprs = [i for i in pc.exprs if i.lhs.is_Symbol or i.lhs == target]
-        clusters.append(PartialCluster(exprs, pc.stencil))
+    for k, v in mapper.items():
+        exprs = [i for i in v.trace[:v.trace.index(k)] if i.lhs.is_Symbol] + [k]
+        clusters.append(PartialCluster(exprs, v.ispace))
 
-    # Attempt grouping as many PartialClusters as possible together
+    # Group PartialClusters together where possible
     return groupby(clusters)
