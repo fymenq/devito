@@ -16,15 +16,15 @@ from devito.dse import rewrite
 from devito.exceptions import InvalidArgument, InvalidOperator
 from devito.function import Forward, Backward, CompositeFunction
 from devito.logger import bar, error, info
+from devito.ir.equations import Eq
 from devito.ir.clusters import clusterize
 from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
                            LocalExpression, MapExpressions, ResolveTimeStepping,
                            SubstituteExpression, Transformer, NestedTransformer,
                            analyze_iterations, compose_nodes, filter_iterations)
-from devito.ir.support import Stencil
 from devito.parameters import configuration
 from devito.profiling import create_profile
-from devito.symbolics import indexify, retrieve_terminals
+from devito.symbolics import retrieve_terminals
 from devito.tools import as_tuple, filter_sorted, flatten, numpy_to_ctypes
 from devito.types import Object
 
@@ -78,15 +78,10 @@ class Operator(Callable):
         # References to local or external routines
         self.func_table = OrderedDict()
 
-        # Expression lowering
-        expressions = [indexify(s) for s in expressions]
-        expressions = [s.xreplace(subs) for s in expressions]
-
-        # Analysis
+        # Expression lowering and analysis
+        expressions = [Eq(e, subs=subs) for e in expressions]
         self.dtype = retrieve_dtype(expressions)
         self.input, self.output, self.dimensions = retrieve_symbols(expressions)
-        stencils = make_stencils(expressions)
-        self.offsets = {d.end_name: v for d, v in retrieve_offsets(stencils).items()}
 
         # Set the direction of time acoording to the given TimeAxis
         for time in [d for d in self.dimensions if d.is_Time]:
@@ -96,11 +91,11 @@ class Operator(Callable):
         # Parameters of the Operator (Dimensions necessary for data casts)
         parameters = self.input + self.dimensions
 
-        # Group expressions based on their Stencil and data dependences
-        clusters = clusterize(expressions, stencils)
-
-        # Apply the Devito Symbolic Engine (DSE) for symbolic optimization
+        # Group expressions based on their iteration space and data dependences,
+        # and apply the Devito Symbolic Engine (DSE) for flop optimization
+        clusters = clusterize(expressions)
         clusters = rewrite(clusters, mode=set_dse_mode(dse))
+        self.offsets = retrieve_offsets(clusters.ispace)
 
         # Wrap expressions with Iterations according to dimensions
         nodes = self._schedule_expressions(clusters)
@@ -304,9 +299,9 @@ class Operator(Callable):
             expressions = [Expression(v, np.int32 if i.trace.is_index(k) else self.dtype)
                            for k, v in i.trace.items()]
 
-            if not i.stencil.empty:
+            if not i.ispace.empty:
                 root = None
-                entries = i.stencil.entries
+                entries = i.ispace.intervals
 
                 # Can I reuse any of the previously scheduled Iterations ?
                 index = 0
@@ -318,8 +313,8 @@ class Operator(Callable):
                 needed = entries[index:]
 
                 # Build and insert the required Iterations
-                iters = [Iteration([], j.dim, j.dim.limits, offsets=j.ofs) for j in
-                         needed]
+                iters = [Iteration([], j.dim, j.dim.limits, offsets=j.limits)
+                         for j in needed]
                 body, tree = compose_nodes(iters + [expressions], retrieve=True)
                 scheduling = OrderedDict(zip(needed, tree))
                 if root is None:
@@ -481,30 +476,14 @@ def retrieve_symbols(expressions):
     return input, output, dimensions
 
 
-def make_stencils(expressions):
-    """
-    Create a :class:`Stencil` for each of the provided expressions. The following
-    rules apply: ::
-
-        * A :class:`SteppingDimension` ``d`` is replaced by its parent ``d.parent``.
-    """
-    stencils = [Stencil(i) for i in expressions]
-    dimensions = set.union(*[set(i.dimensions) for i in stencils])
-
-    # Filter out aliasing stepping dimensions
-    mapper = {d.parent: d for d in dimensions if d.is_Stepping}
-    return [i.replace(mapper) for i in stencils]
-
-
-def retrieve_offsets(stencils):
+def retrieve_offsets(ispace):
     """
     Return a mapper from :class:`Dimension`s to the min/max integer offsets
-    within ``stencils``.
+    within ``ispace``.
     """
-    offs = Stencil.union(*stencils)
-    mapper = {d: v for d, v in offs.diameter.items()}
+    mapper = {i.dim: i.min_extent for i in ispace.intervals}
     mapper.update({d.parent: v for d, v in mapper.items() if d.is_Stepping})
-    return mapper
+    return {d.end_name: v for d, v in mapper.items()}
 
 
 # Misc helpers
