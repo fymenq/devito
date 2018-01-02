@@ -16,6 +16,7 @@ from devito.dse import rewrite
 from devito.exceptions import InvalidArgument, InvalidOperator
 from devito.function import Forward, Backward, CompositeFunction
 from devito.logger import bar, error, info
+from devito.ir.equations import Eq
 from devito.ir.clusters import clusterize
 from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
                            LocalExpression, MapExpressions, ResolveTimeStepping,
@@ -24,7 +25,7 @@ from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
 from devito.ir.support import Stencil
 from devito.parameters import configuration
 from devito.profiling import create_profile
-from devito.symbolics import indexify, retrieve_terminals
+from devito.symbolics import retrieve_terminals
 from devito.tools import as_tuple, filter_sorted, flatten, numpy_to_ctypes
 from devito.types import Object
 
@@ -79,14 +80,16 @@ class Operator(Callable):
         self.func_table = OrderedDict()
 
         # Expression lowering
-        expressions = [indexify(s) for s in expressions]
-        expressions = [s.xreplace(subs) for s in expressions]
+        expressions = [Eq(e, subs=subs) for e in expressions]
 
         # Analysis
         self.dtype = retrieve_dtype(expressions)
         self.input, self.output, self.dimensions = retrieve_symbols(expressions)
-        stencils = make_stencils(expressions)
-        self.offsets = {d.end_name: v for d, v in retrieve_offsets(stencils).items()}
+
+        # TODO: fix me (no stencils anymore); use Box.merge in a new ClusterGroup
+        # method returning the bounds of the cluster group
+        # self.offsets = {d.end_name: v for d, v in retrieve_offsets(stencils).items()}
+        # self.offsets = Box.merge(*[c.domain for c in clusters])
 
         # Set the direction of time acoording to the given TimeAxis
         for time in [d for d in self.dimensions if d.is_Time]:
@@ -97,7 +100,7 @@ class Operator(Callable):
         parameters = self.input + self.dimensions
 
         # Group expressions based on their Stencil and data dependences
-        clusters = clusterize(expressions, stencils)
+        clusters = clusterize(expressions)
 
         # Apply the Devito Symbolic Engine (DSE) for symbolic optimization
         clusters = rewrite(clusters, mode=set_dse_mode(dse))
@@ -477,21 +480,6 @@ def retrieve_symbols(expressions):
     dimensions = filter_sorted(dimensions, key=attrgetter('name'))
 
     return input, output, dimensions
-
-
-def make_stencils(expressions):
-    """
-    Create a :class:`Stencil` for each of the provided expressions. The following
-    rules apply: ::
-
-        * A :class:`SteppingDimension` ``d`` is replaced by its parent ``d.parent``.
-    """
-    stencils = [Stencil(i) for i in expressions]
-    dimensions = set.union(*[set(i.dimensions) for i in stencils])
-
-    # Filter out aliasing stepping dimensions
-    mapper = {d.parent: d for d in dimensions if d.is_Stepping}
-    return [i.replace(mapper) for i in stencils]
 
 
 def retrieve_offsets(stencils):
