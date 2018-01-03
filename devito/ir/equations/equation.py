@@ -9,22 +9,17 @@ __all__ = ['Eq']
 class Eq(sympy.Eq):
 
     """
-    A new SymPy equation with an associated domain.
-
-    The domain is an object of type :class:`Box`. If not provided, the domain is
-    inferred from the :class:`Stencil` of ``expr``.
+    A new SymPy equation with an associated data space.
 
     All :class:`Function` objects within ``expr`` get indexified and thus turned
     into objects of type :class:`types.Indexed`.
 
-    .. note::
-
-        With the domain-allocation switch, the domain will be inferred from
-        the :class:`Function`s in ``expr`` (ie, from their halo region), rather
-        than from its :class:`Stencil`.
+    A data space is an object of type :class:`Box`. It represents the data points
+    accessed by the equation along each iteration :class:`Dimension`. The iteration
+    :class:`Dimension`s are extracted from the :class:`Indexed`s of the equation.
     """
 
-    def __new__(cls, expr, domain=None, subs=None, **kwargs):
+    def __new__(cls, expr, dspace=None, subs=None, **kwargs):
         # Sanity check
         assert isinstance(expr, sympy.Eq)
 
@@ -37,18 +32,14 @@ class Eq(sympy.Eq):
 
         expr = super(Eq, cls).__new__(cls, expr.lhs, expr.rhs, **kwargs)
 
-        # Domain derivation
-        if domain is not None:
-            expr.domain = domain
+        # Data space derivation
+        if dspace is not None:
+            expr.dspace = dspace
         else:
             stencil = Stencil(expr)
             stencil = stencil.replace({d.parent: d for d in stencil.dimensions
                                        if d.is_Stepping})
-            intervals = []
-            for k, v in stencil.items():
-                lower = min(v) if min(v) < 0 else None
-                upper = max(v) if max(v) > 0 else None
-                intervals.append(Interval(k, lower, upper))
-            expr.domain = Box(intervals)
+            intervals = [Interval(k, min(v), max(v)) for k, v in stencil.items()]
+            expr.dspace = Box(intervals)
 
         return expr
