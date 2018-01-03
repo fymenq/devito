@@ -380,7 +380,7 @@ def test_intervals_union():
 
     # Mixed disjoint (note: Box input order is irrelevant)
     assert ix.union(ix4) == Box([ix4, ix])
-    assert ix.union(ix5) == Box([ix, ix5])
+    assert ix.union(ix5) == Interval(x, -3, 2)
     assert ix6.union(ix) == Box([ix, ix6])
     assert ix.union(nully) == Box([ix, nully])
     assert ix.union(iy) == Box([iy, ix])
