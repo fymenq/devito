@@ -89,7 +89,7 @@ class Stencil(DefaultOrderedDict):
                     if isinstance(i, Dimension):
                         d = i
                     elif i.is_integer:
-                        off += [i]
+                        off += [int(i)]
                 if d is not None:
                     stencil[d].update(off)
 
