@@ -437,3 +437,17 @@ def sweep(parameters, keys=None):
                     for v in sweep_values]
     for vals in product(*sweep_values):
         yield dict(zip(keys, vals))
+
+
+class Bunch(object):
+    """
+    Bind together an arbitrary number of generic items. This is a mutable
+    alternative to a ``namedtuple``.
+
+    From: ::
+
+        http://code.activestate.com/recipes/52308-the-simple-but-handy-collector-of\
+        -a-bunch-of-named/?in=user-97991
+    """
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
