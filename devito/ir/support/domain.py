@@ -169,6 +169,10 @@ class Box(object):
     def __eq__(self, o):
         return set(self.intervals) == set(o.intervals)
 
+    @property
+    def empty(self):
+        return len(self.intervals) == 0
+
     def intersection(self, *boxes):
         mapper = {i.dim: [i] for i in self.intervals}
         for i in boxes:
@@ -177,9 +181,13 @@ class Box(object):
         return Box([Interval.op(v, 'intersection') for v in mapper.values()])
 
     def subtract(self, o):
-        mapper = {i.dim: i for i in self.intervals}
-        intervals = [mapper[i.dim].subtract(i) for i in o.intervals if i.dim in mapper]
+        mapper = {i.dim: i for i in o.intervals}
+        intervals = [i.subtract(mapper.get(i.dim, NullInterval(i.dim)))
+                     for i in self.intervals]
         return Box(intervals)
+
+    def drop(self, d):
+        return Box([i._rebuild() for i in self.intervals if i.dim not in as_tuple(d)])
 
     def negate(self):
         return Box([i.negate() for i in self.intervals])
@@ -207,6 +215,9 @@ class Schedule(Box):
 
     def subtract(self, o):
         return Schedule(super(Schedule, self).subtract(o), key=self.key)
+
+    def drop(self, d):
+        return Schedule(super(Schedule, self).drop(d), key=self.key)
 
     def negate(self):
         return Schedule(super(Schedule, self).negate(), key=self.key)
