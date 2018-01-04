@@ -385,3 +385,26 @@ def test_intervals_union():
     assert ix.union(nully) == Box([ix, nully])
     assert ix.union(iy) == Box([iy, ix])
     assert iy.union(ix) == Box([iy, ix])
+
+
+@skipif_yask
+def test_intervals_subtract():
+    nullx = NullInterval(x)
+
+    # All nulls
+    assert nullx.subtract(nullx) == nullx
+
+    ix = Interval(x, 2, -2)
+
+    # Mixed nulls and defined on the same dimension
+    assert nullx.subtract(ix) == nullx
+    assert ix.subtract(ix) == Interval(x, 0, 0)
+    assert ix.subtract(nullx) == ix
+
+    ix2 = Interval(x, 4, -4)
+    ix3 = Interval(x, 6, -6)
+
+    # All defined same dimension
+    assert ix2.subtract(ix) == ix
+    assert ix.subtract(ix2) == Interval(x, -2, 2)
+    assert ix3.subtract(ix) == ix2

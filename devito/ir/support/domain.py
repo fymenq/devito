@@ -33,17 +33,18 @@ class AbstractInterval(object):
     def _rebuild(self):
         return
 
-    @abc.abstractmethod
     def intersection(self, o):
-        return
+        return self._rebuild()
 
     @abc.abstractmethod
     def union(self, o):
-        return
+        return self._rebuild()
 
-    @abc.abstractmethod
+    def subtract(self, o):
+        return self._rebuild()
+
     def negate(self):
-        return
+        return self._rebuild()
 
     @abc.abstractmethod
     def overlap(self, o):
@@ -65,12 +66,6 @@ class NullInterval(AbstractInterval):
 
     def _rebuild(self):
         return NullInterval(self.dim)
-
-    def intersection(self, o):
-        return self._rebuild()
-
-    def negate(self):
-        return self._rebuild()
 
     def union(self, o):
         if self.dim == o.dim:
@@ -111,19 +106,23 @@ class Interval(AbstractInterval):
 
     def intersection(self, o):
         if self.overlap(o):
-            return Interval(self.dim, max(self.lower, o.lower),
-                            min(self.upper, o.upper))
+            return Interval(self.dim, max(self.lower, o.lower), min(self.upper, o.upper))
         else:
             return NullInterval(self.dim)
 
     def union(self, o):
         if self.overlap(o):
-            return Interval(self.dim, min(self.lower, o.lower),
-                            max(self.upper, o.upper))
+            return Interval(self.dim, min(self.lower, o.lower), max(self.upper, o.upper))
         elif o.is_Null and self.dim == o.dim:
             return self._rebuild()
         else:
             return Box([self._rebuild(), o._rebuild()])
+
+    def subtract(self, o):
+        if self.dim != o.dim or o.is_Null:
+            return self._rebuild()
+        else:
+            return Interval(self.dim, self.lower - o.lower, self.upper - o.upper)
 
     def negate(self):
         return Interval(self.dim, -self.lower, -self.upper)
@@ -177,6 +176,11 @@ class Box(object):
                 mapper.get(interval.dim, []).append(interval)
         return Box([Interval.op(v, 'intersection') for v in mapper.values()])
 
+    def subtract(self, o):
+        mapper = {i.dim: i for i in self.intervals}
+        intervals = [mapper[i.dim].subtract(i) for i in o.intervals if i.dim in mapper]
+        return Box(intervals)
+
     def negate(self):
         return Box([i.negate() for i in self.intervals])
 
@@ -200,6 +204,9 @@ class Schedule(Box):
 
     def intersection(self, *boxes):
         return Schedule(super(Schedule, self).intersection(*boxes), key=self.key)
+
+    def subtract(self, o):
+        return Schedule(super(Schedule, self).subtract(o), key=self.key)
 
     def negate(self):
         return Schedule(super(Schedule, self).negate(), key=self.key)
