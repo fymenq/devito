@@ -2,8 +2,9 @@ from collections import OrderedDict, namedtuple
 
 from sympy import Eq
 
-from devito.exceptions import StencilOperationError
 from devito.dimension import Dimension
+from devito.exceptions import StencilOperationError
+from devito.ir.support.domain import Interval, Box
 from devito.symbolics import retrieve_indexed, retrieve_terminals
 from devito.tools import DefaultOrderedDict, flatten, partial_order
 
@@ -41,10 +42,10 @@ class Stencil(DefaultOrderedDict):
             else:
                 for j in i:
                     if isinstance(j, StencilEntry):
-                        processed.append((j.dim, set(j.ofs)))
+                        processed.append((j.dim, j.ofs))
                     elif isinstance(j, tuple) and len(j) == 2:
                         entry = StencilEntry(*j)  # Type checking
-                        processed.append((entry.dim, set(entry.ofs)))
+                        processed.append((entry.dim, entry.ofs))
                     else:
                         raise RuntimeError('Cannot construct a Stencil for %s' % str(j))
         super(Stencil, self).__init__(set, processed)
@@ -91,10 +92,6 @@ class Stencil(DefaultOrderedDict):
         return output
 
     @property
-    def frozen(self):
-        return Stencil([(k, frozenset(v)) for k, v in self.items()])
-
-    @property
     def empty(self):
         return all(len(i) == 0 for i in self.values())
 
@@ -109,28 +106,6 @@ class Stencil(DefaultOrderedDict):
     @property
     def diameter(self):
         return {k: abs(max(v) - min(v)) for k, v in self.items()}
-
-    def null(self):
-        """
-        Return the null Stencil of ``self``.
-
-        Examples:
-
-        self = {i: {-1, 0, 1}, j: {-2, -1, 0, 1, 2}}
-        self.null() >> {i: {0}, j: {0}}
-        """
-        return Stencil([(i, set([0])) for i in self.dimensions])
-
-    def section(self, d):
-        """
-        Return a view of the Stencil in which the Dimensions in ``d`` have been
-        dropped.
-        """
-        output = Stencil()
-        for k, v in self.items():
-            if k not in d:
-                output[k] = set(v)
-        return output
 
     def subtract(self, o):
         """
@@ -156,58 +131,6 @@ class Stencil(DefaultOrderedDict):
                 output[k] |= o[k]
         return output
 
-    def rshift(self, m):
-        """
-        Right-shift the Dimensions ``d`` of ``self`` appearing in the mapper ``m``
-        by the constant quantity ``m[d]``.
-        """
-        return Stencil([(k, set([i - m.get(k, 0) for i in v])) for k, v in self.items()])
-
-    def split(self, ds=None):
-        """
-        Split ``self`` into two Stencils, one with the negative axis, and one
-        with the positive axis. If ``ds`` is provided, the split occurs only
-        along the Dimensions listed in ``ds``.
-        """
-        ds = ds or self.dimensions
-        negative, positive = Stencil(), Stencil()
-        for k, v in self.items():
-            if k in ds:
-                negative[k] = {i for i in v if i < 0}
-                positive[k] = {i for i in v if i > 0}
-        return negative, positive
-
-    def anti(self, o):
-        """
-        Compute the anti-Stencil of ``self`` constrained by ``o``.
-
-        Examples:
-
-        Assuming one single dimension (omitted for brevity)
-
-        self = {-3, -2, -1, 0, 1, 2, 3}
-        o = {-3, -2, -1, 0, 1, 2, 3}
-        self.anti(o) >> {}
-
-        self = {-3, -2, -1, 0, 1, 2, 3}
-        o = {-2, -1, 0, 1}
-        self.anti(o) >> {-1, 0, 1, 2}
-
-        self = {-1, 0, 1}
-        o = {-2, -1, 0, 1, 2}
-        self.anti(o) >> {-1, 0, 1}
-        """
-        if any(not o[i].issuperset(self[i]) for i in o.dimensions if i in self):
-            raise StencilOperationError
-
-        diff = o.subtract(self)
-        n, p = diff.split()
-        n = n.rshift({i: min(self[i]) for i in self})
-        p = p.rshift({i: max(self[i]) for i in self})
-        union = Stencil.union(*[n, o.null(), p])
-
-        return union
-
     def get(self, k, v=None):
         obj = super(Stencil, self).get(k, v)
         return frozenset([0]) if obj is None else obj
@@ -229,6 +152,12 @@ class Stencil(DefaultOrderedDict):
         Return a deep copy of the Stencil.
         """
         return Stencil(self.entries)
+
+    def boxify(self):
+        """
+        Create a :class:`Box` from ``self``, with as many intervals as dimensions.
+        """
+        return Box([Interval(k, min(v), max(v)) for k, v in self.items()])
 
     def replace(self, mapper):
         """
