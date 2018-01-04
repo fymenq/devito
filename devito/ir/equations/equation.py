@@ -19,12 +19,12 @@ class Eq(sympy.Eq):
     :class:`Dimension`s are extracted from the :class:`Indexed`s of the equation.
     """
 
-    def __new__(cls, expr, dspace=None, subs=None, **kwargs):
+    def __new__(cls, input_expr, dspace=None, subs=None, **kwargs):
         # Sanity check
-        assert isinstance(expr, sympy.Eq)
+        assert isinstance(input_expr, sympy.Eq)
 
         # Indexification
-        expr = indexify(expr)
+        expr = indexify(input_expr)
 
         # Apply caller-provided substitution
         if subs is not None:
@@ -40,5 +40,8 @@ class Eq(sympy.Eq):
             stencil = stencil.replace({d.parent: d for d in stencil.dimensions
                                        if d.is_Stepping})
             expr.dspace = stencil.boxify()
+
+        # Was this an Increment?
+        expr.is_Increment = input_expr.is_Increment
 
         return expr
