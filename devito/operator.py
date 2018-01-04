@@ -99,7 +99,7 @@ class Operator(Callable):
         # Parameters of the Operator (Dimensions necessary for data casts)
         parameters = self.input + self.dimensions
 
-        # Group expressions based on their Stencil and data dependences
+        # Group expressions based on their iteration space and data dependences
         clusters = clusterize(expressions)
 
         # Apply the Devito Symbolic Engine (DSE) for symbolic optimization
@@ -309,8 +309,7 @@ class Operator(Callable):
 
             if not i.ispace.empty:
                 root = None
-                from IPython import embed; embed()
-                entries = i.stencil.entries
+                entries = i.ispace.intervals
 
                 # Can I reuse any of the previously scheduled Iterations ?
                 index = 0
@@ -322,8 +321,8 @@ class Operator(Callable):
                 needed = entries[index:]
 
                 # Build and insert the required Iterations
-                iters = [Iteration([], j.dim, j.dim.limits, offsets=j.ofs) for j in
-                         needed]
+                iters = [Iteration([], j.dim, j.dim.limits, offsets=j.limits)
+                         for j in needed]
                 body, tree = compose_nodes(iters + [expressions], retrieve=True)
                 scheduling = OrderedDict(zip(needed, tree))
                 if root is None:
