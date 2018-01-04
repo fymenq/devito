@@ -1,12 +1,13 @@
-from collections import OrderedDict, namedtuple
+from collections import namedtuple
 
 from sympy import Eq
 
 from devito.dimension import Dimension
-from devito.exceptions import StencilOperationError
 from devito.ir.support.domain import Interval, Box
 from devito.symbolics import retrieve_indexed, retrieve_terminals
-from devito.tools import DefaultOrderedDict, flatten, partial_order
+from devito.tools import DefaultOrderedDict, flatten
+
+__all__ = ['Stencil']
 
 
 class Stencil(DefaultOrderedDict):
