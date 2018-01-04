@@ -1,6 +1,6 @@
 from collections import OrderedDict, namedtuple
 
-from devito.ir.support import Box, Scope
+from devito.ir.support import Schedule, Scope
 from devito.ir.clusters.cluster import PartialCluster, ClusterGroup
 from devito.symbolics import xreplace_indices
 from devito.types import Scalar
@@ -186,11 +186,13 @@ def clusterize(exprs):
     """Group a sequence of :class:`ir.Eq`s into one or more :class:`Cluster`s."""
 
     # Build a dependency graph for the input exprs
-    mapper = {}
+    mapper = OrderedDict()
     for i, e1 in enumerate(exprs):
         trace = [e2 for e2 in exprs[:i] if Scope([e2, e1]).has_dep] + [e1]
         trace.extend([e2 for e2 in exprs[i+1:] if Scope([e1, e2]).has_dep])
-        mapper[e1] = Bunch(trace=trace, ispace=e1.dspace.negate())
+        # Note: the time dimension has priority
+        ispace = Schedule(e1.dspace.negate(), lambda i: not i.dim.is_Time)
+        mapper[e1] = Bunch(trace=trace, ispace=ispace)
 
     # Derive the iteration spaces
     queue = list(mapper)
@@ -199,11 +201,11 @@ def clusterize(exprs):
 
         ispaces = [mapper[i].ispace for i in mapper[target].trace]
 
-        relaxed_ispace = mapper[target].ispace.intersection(*ispaces)
+        coerced_ispace = mapper[target].ispace.intersection(*ispaces)
 
-        if relaxed_ispace != mapper[target].ispace:
+        if coerced_ispace != mapper[target].ispace:
             # Something has changed, need to propagate the update
-            mapper[target].ispace = relaxed_ispace
+            mapper[target].ispace = coerced_ispace
             queue.extend([i for i in mapper[target].trace if i not in queue])
 
     # Include scalar (temporary) expressions
