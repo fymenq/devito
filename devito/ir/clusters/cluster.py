@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from sympy import Eq
 from cached_property import cached_property
 
 from devito.ir.clusters.graph import FlowGraph
@@ -22,7 +23,7 @@ class PartialCluster(object):
     """
 
     def __init__(self, exprs, ispace):
-        self._exprs = list(exprs)
+        self._exprs = list([Eq(*i.args) for i in exprs])
         self._ispace = ispace
 
     @property
@@ -66,8 +67,8 @@ class Cluster(PartialCluster):
     """A Cluster is an immutable :class:`PartialCluster`."""
 
     def __init__(self, exprs, ispace):
+        super(Cluster, self).__init__(exprs, ispace)
         self._exprs = as_tuple(exprs)
-        self._ispace = ispace.frozen
 
     @cached_property
     def trace(self):

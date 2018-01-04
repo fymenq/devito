@@ -1,5 +1,7 @@
 from collections import OrderedDict, namedtuple
 
+from sympy import Eq
+
 from devito.ir.support import Schedule, Scope
 from devito.ir.clusters.cluster import PartialCluster, ClusterGroup
 from devito.symbolics import xreplace_indices
@@ -11,8 +13,8 @@ __all__ = ['clusterize', 'groupby']
 
 def groupby(clusters):
     """
-    Group :class:`Cluster`s together to create bigger :class:`Cluster`s
-    (i.e., containing more expressions).
+    Attempt grouping :class:`PartialCluster`s together to create bigger
+    :class:`PartialCluster`s (i.e., containing more expressions).
 
     .. note::
 
@@ -21,12 +23,11 @@ def groupby(clusters):
     """
     clusters = clusters.unfreeze()
 
-    # Attempt cluster fusion
     processed = ClusterGroup()
     for c in clusters:
         fused = False
         for candidate in reversed(list(processed)):
-            # Check all data dependences relevant for cluster fusion
+            # Collect all relevant data dependences
             scope = Scope(exprs=candidate.exprs + c.exprs)
             anti = scope.d_anti.carried() - scope.d_anti.increment
             flow = scope.d_flow - (scope.d_flow.inplace() + scope.d_flow.increment)
@@ -59,7 +60,7 @@ def groupby(clusters):
         if not fused:
             processed.append(c)
 
-    return processed.freeze()
+    return processed
 
 
 def is_local(array, source, sink, context):
@@ -215,4 +216,6 @@ def clusterize(exprs):
         clusters.append(PartialCluster(exprs, v.ispace))
 
     # Group PartialClusters together where possible
-    return groupby(clusters)
+    clusters = groupby(clusters)
+
+    return clusters.freeze()
