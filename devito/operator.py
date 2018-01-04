@@ -22,7 +22,6 @@ from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
                            LocalExpression, MapExpressions, ResolveTimeStepping,
                            SubstituteExpression, Transformer, NestedTransformer,
                            analyze_iterations, compose_nodes, filter_iterations)
-from devito.ir.support import Stencil
 from devito.parameters import configuration
 from devito.profiling import create_profile
 from devito.symbolics import retrieve_terminals
