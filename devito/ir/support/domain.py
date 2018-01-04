@@ -104,6 +104,10 @@ class Interval(AbstractInterval):
     def _rebuild(self):
         return Interval(self.dim, self.lower, self.upper)
 
+    @property
+    def limits(self):
+        return (self.lower, self.upper)
+
     def intersection(self, o):
         if self.overlap(o):
             return Interval(self.dim, max(self.lower, o.lower), min(self.upper, o.upper))
@@ -154,7 +158,7 @@ class Box(object):
     """
 
     def __init__(self, intervals):
-        self.intervals = as_tuple(set(intervals))
+        self.intervals = as_tuple(intervals)
 
     def __repr_key__(self, interval):
         lower = -np.inf if interval.is_Null else interval.lower
