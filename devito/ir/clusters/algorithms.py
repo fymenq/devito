@@ -1,6 +1,4 @@
-from collections import OrderedDict, namedtuple
-
-from sympy import Eq
+from collections import OrderedDict
 
 from devito.ir.support import Schedule, Scope
 from devito.ir.clusters.cluster import PartialCluster, ClusterGroup
