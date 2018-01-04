@@ -79,10 +79,8 @@ class Operator(Callable):
         # References to local or external routines
         self.func_table = OrderedDict()
 
-        # Expression lowering
+        # Expression lowering and analysis
         expressions = [Eq(e, subs=subs) for e in expressions]
-
-        # Analysis
         self.dtype = retrieve_dtype(expressions)
         self.input, self.output, self.dimensions = retrieve_symbols(expressions)
 
@@ -94,13 +92,10 @@ class Operator(Callable):
         # Parameters of the Operator (Dimensions necessary for data casts)
         parameters = self.input + self.dimensions
 
-        # Group expressions based on their iteration space and data dependences
+        # Group expressions based on their iteration space and data dependences,
+        # and apply the Devito Symbolic Engine (DSE) for flop optimization
         clusters = clusterize(expressions)
-
-        # Apply the Devito Symbolic Engine (DSE) for symbolic optimization
         clusters = rewrite(clusters, mode=set_dse_mode(dse))
-
-        # Track down iteration bounds
         self.offsets = retrieve_offsets(clusters.ispace)
 
         # Wrap expressions with Iterations according to dimensions
