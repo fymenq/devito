@@ -4,6 +4,8 @@ import numpy as np
 
 from devito.tools import as_tuple
 
+__all__ = ['NullInterval', 'Interval', 'Box', 'Schedule']
+
 
 class AbstractInterval(object):
 
@@ -28,7 +30,7 @@ class AbstractInterval(object):
         return partial
 
     @abc.abstractmethod
-    def rebuild(self):
+    def _rebuild(self):
         return
 
     @abc.abstractmethod
@@ -61,20 +63,20 @@ class NullInterval(AbstractInterval):
     def __repr__(self):
         return "%s[Null]" % self.dim
 
-    def rebuild(self):
+    def _rebuild(self):
         return NullInterval(self.dim)
 
     def intersection(self, o):
-        return self.rebuild()
+        return self._rebuild()
 
     def negate(self):
-        return self.rebuild()
+        return self._rebuild()
 
     def union(self, o):
         if self.dim == o.dim:
-            return o.rebuild()
+            return o._rebuild()
         else:
-            return Box([self.rebuild(), o.rebuild()])
+            return Box([self._rebuild(), o._rebuild()])
 
     def overlap(self, o):
         return False
@@ -104,7 +106,7 @@ class Interval(AbstractInterval):
     def __repr__(self):
         return "%s[%s, %s]" % (self.dim, self.lower, self.upper)
 
-    def rebuild(self):
+    def _rebuild(self):
         return Interval(self.dim, self.lower, self.upper)
 
     def intersection(self, o):
@@ -119,9 +121,9 @@ class Interval(AbstractInterval):
             return Interval(self.dim, min(self.lower, o.lower),
                             max(self.upper, o.upper))
         elif o.is_Null and self.dim == o.dim:
-            return self.rebuild()
+            return self._rebuild()
         else:
-            return Box([self.rebuild(), o.rebuild()])
+            return Box([self._rebuild(), o._rebuild()])
 
     def negate(self):
         return Interval(self.dim, -self.lower, -self.upper)
@@ -153,18 +155,20 @@ class Box(object):
     """
 
     def __init__(self, intervals):
-        def key(interval):
-            lower = -np.inf if interval.is_Null else interval.lower
-            upper = np.inf if interval.is_Null else interval.upper
-            return (interval.dim.name, lower, upper)
-        self.intervals = sorted(set(as_tuple(intervals)), key=key)
+        self.intervals = as_tuple(set(intervals))
+
+    def __repr_key__(self, interval):
+        lower = -np.inf if interval.is_Null else interval.lower
+        upper = np.inf if interval.is_Null else interval.upper
+        return (interval.dim.name, lower, upper)
 
     def __repr__(self):
-        return "Box[%s]" % ', '.join([repr(i) for i in self.intervals])
+        intervals = sorted(self.intervals, key=self.__repr_key__)
+        return "%s[%s]" % (self.__class__.__name__,
+                           ', '.join([repr(i) for i in intervals]))
 
     def __eq__(self, o):
-        return len(self.intervals) == len(o.intervals) and\
-            all(i == j for i, j in zip(self.intervals, o.intervals))
+        return set(self.intervals) == set(o.intervals)
 
     def intersection(self, *boxes):
         mapper = {i.dim: [i] for i in self.intervals}
@@ -175,3 +179,27 @@ class Box(object):
 
     def negate(self):
         return Box([i.negate() for i in self.intervals])
+
+
+class Schedule(Box):
+
+    """
+    A special :class:`Box` with ordered intervals. The ordering is established
+    through a callable ``key`` which accepts as input a :class:`Interval` and
+    returns a value.
+    """
+
+    def __init__(self, maybe_box, key):
+        assert callable(key)
+        intervals = maybe_box.intervals if isinstance(maybe_box, Box) else maybe_box
+        self.intervals = as_tuple(sorted(intervals, key=key))
+        self.key = key
+
+    def __repr_key__(self, interval):
+        return (self.key(interval),) + super(Schedule, self).__repr_key__(interval)
+
+    def intersection(self, *boxes):
+        return Schedule(super(Schedule, self).intersection(*boxes), key=self.key)
+
+    def negate(self):
+        return Schedule(super(Schedule, self).negate(), key=self.key)
