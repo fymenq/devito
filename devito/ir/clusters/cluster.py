@@ -3,6 +3,7 @@ from collections import defaultdict
 from sympy import Eq
 from cached_property import cached_property
 
+from devito.ir.support import Schedule
 from devito.ir.clusters.graph import FlowGraph
 
 __all__ = ["Cluster", "ClusterGroup"]
@@ -107,6 +108,15 @@ class ClusterGroup(list):
     def __init__(self, *clusters):
         super(ClusterGroup, self).__init__(*clusters)
         self.atomics = defaultdict(set)
+
+    @property
+    def ispace(self):
+        """
+        Return the union of all Clusters' iteration spaces.
+        """
+        if not self:
+            return Schedule([])
+        return Schedule.intersection_update(*[i.ispace for i in self])
 
     def unfreeze(self):
         """

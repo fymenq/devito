@@ -86,11 +86,6 @@ class Operator(Callable):
         self.dtype = retrieve_dtype(expressions)
         self.input, self.output, self.dimensions = retrieve_symbols(expressions)
 
-        # TODO: fix me (no stencils anymore); use Box.merge in a new ClusterGroup
-        # method returning the bounds of the cluster group
-        # self.offsets = {d.end_name: v for d, v in retrieve_offsets(stencils).items()}
-        # self.offsets = Box.merge(*[c.domain for c in clusters])
-
         # Set the direction of time acoording to the given TimeAxis
         for time in [d for d in self.dimensions if d.is_Time]:
             if not time.is_Stepping:
@@ -104,6 +99,9 @@ class Operator(Callable):
 
         # Apply the Devito Symbolic Engine (DSE) for symbolic optimization
         clusters = rewrite(clusters, mode=set_dse_mode(dse))
+
+        # Track down iteration bounds
+        self.offsets = retrieve_offsets(clusters.ispace)
 
         # Wrap expressions with Iterations according to dimensions
         nodes = self._schedule_expressions(clusters)
@@ -484,15 +482,14 @@ def retrieve_symbols(expressions):
     return input, output, dimensions
 
 
-def retrieve_offsets(stencils):
+def retrieve_offsets(ispace):
     """
     Return a mapper from :class:`Dimension`s to the min/max integer offsets
-    within ``stencils``.
+    within ``ispace``.
     """
-    offs = Stencil.union(*stencils)
-    mapper = {d: v for d, v in offs.diameter.items()}
+    mapper = {i.dim: i.min_extent for i in ispace.intervals}
     mapper.update({d.parent: v for d, v in mapper.items() if d.is_Stepping})
-    return mapper
+    return {d.end_name: v for d, v in mapper.items()}
 
 
 # Misc helpers
