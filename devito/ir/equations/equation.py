@@ -1,6 +1,6 @@
 import sympy
 
-from devito.ir.support import Interval, Box, Stencil
+from devito.ir.support import Stencil
 from devito.symbolics import indexify
 
 __all__ = ['Eq']
@@ -39,7 +39,6 @@ class Eq(sympy.Eq):
             stencil = Stencil(expr)
             stencil = stencil.replace({d.parent: d for d in stencil.dimensions
                                        if d.is_Stepping})
-            intervals = [Interval(k, min(v), max(v)) for k, v in stencil.items()]
-            expr.dspace = Box(intervals)
+            expr.dspace = stencil.boxify()
 
         return expr
