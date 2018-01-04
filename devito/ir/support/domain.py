@@ -1,4 +1,5 @@
 import abc
+from collections import defaultdict
 
 import numpy as np
 
@@ -176,6 +177,14 @@ class Box(object):
     @property
     def empty(self):
         return len(self.intervals) == 0
+
+    @classmethod
+    def intersection_update(self, *boxes):
+        mapper = {}
+        for i in boxes:
+            for interval in i.intervals:
+                mapper.setdefault(interval.dim, []).append(interval)
+        return Box([Interval.op(v, 'intersection') for v in mapper.values()])
 
     def intersection(self, *boxes):
         mapper = {i.dim: [i] for i in self.intervals}
