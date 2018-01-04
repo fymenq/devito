@@ -307,8 +307,9 @@ class Operator(Callable):
             expressions = [Expression(v, np.int32 if i.trace.is_index(k) else self.dtype)
                            for k, v in i.trace.items()]
 
-            if not i.stencil.empty:
+            if not i.ispace.empty:
                 root = None
+                from IPython import embed; embed()
                 entries = i.stencil.entries
 
                 # Can I reuse any of the previously scheduled Iterations ?

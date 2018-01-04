@@ -218,4 +218,4 @@ def clusterize(exprs):
     # Group PartialClusters together where possible
     clusters = groupby(clusters)
 
-    return clusters.freeze()
+    return clusters.finalize()
