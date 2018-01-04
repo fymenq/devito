@@ -4,7 +4,6 @@ from sympy import Eq
 from cached_property import cached_property
 
 from devito.ir.clusters.graph import FlowGraph
-from devito.tools import as_tuple
 
 __all__ = ["Cluster", "ClusterGroup"]
 
@@ -23,7 +22,7 @@ class PartialCluster(object):
     """
 
     def __init__(self, exprs, ispace):
-        self._exprs = list([Eq(*i.args) for i in exprs])
+        self._exprs = list(exprs)
         self._ispace = ispace
 
     @property
@@ -67,8 +66,8 @@ class Cluster(PartialCluster):
     """A Cluster is an immutable :class:`PartialCluster`."""
 
     def __init__(self, exprs, ispace):
-        super(Cluster, self).__init__(exprs, ispace)
-        self._exprs = as_tuple(exprs)
+        self._exprs = tuple(Eq(*i.args) for i in exprs)
+        self._ispace = ispace
 
     @cached_property
     def trace(self):
@@ -117,7 +116,7 @@ class ClusterGroup(list):
         return ClusterGroup([PartialCluster(i.exprs, i.ispace)
                              if isinstance(i, Cluster) else i for i in self])
 
-    def freeze(self):
+    def finalize(self):
         """
         Return a new ClusterGroup in which all of ``self``'s PartialClusters
         have been turned into actual Clusters.

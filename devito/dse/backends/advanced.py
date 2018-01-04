@@ -141,6 +141,8 @@ class AdvancedRewriter(BasicRewriter):
             # Build new Cluster
             expression = Eq(Indexed(function, *indices), origin)
             ispace = cluster.ispace.subtract(alias.anti_stencil.boxify().negate())
+            if all(time_invariants[i] for i in alias.aliased):
+                ispace = ispace.drop(g.time_indices)
             alias_clusters.append(Cluster([expression], ispace))
             # Update substitution rules
             for aliased, distance in alias.with_distance:
@@ -148,7 +150,7 @@ class AdvancedRewriter(BasicRewriter):
                 temporary = Indexed(function, *tuple(coordinates))
                 rules[candidates[aliased]] = temporary
                 rules[aliased] = temporary
-        alias_clusters = groupby(alias_clusters).freeze()
+        alias_clusters = groupby(alias_clusters).finalize()
         alias_clusters.sort(key=lambda i: i.is_dense)
 
         # Switch temporaries in the expression trees
