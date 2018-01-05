@@ -19,7 +19,7 @@ class Eq(sympy.Eq):
     :class:`Dimension`s are extracted from the :class:`Indexed`s of the equation.
     """
 
-    def __new__(cls, input_expr, dspace=None, subs=None, **kwargs):
+    def __new__(cls, input_expr, dspace=None, subs=None):
         # Sanity check
         assert isinstance(input_expr, sympy.Eq)
 
@@ -30,7 +30,7 @@ class Eq(sympy.Eq):
         if subs is not None:
             expr = expr.xreplace(subs)
 
-        expr = super(Eq, cls).__new__(cls, expr.lhs, expr.rhs, **kwargs)
+        expr = super(Eq, cls).__new__(cls, expr.lhs, expr.rhs, evaluate=False)
 
         # Data space derivation
         if dspace is not None:
@@ -42,6 +42,14 @@ class Eq(sympy.Eq):
             expr.dspace = stencil.boxify()
 
         # Was this an Increment?
-        expr.is_Increment = input_expr.is_Increment
+        expr.is_Increment = getattr(input_expr, 'is_Increment', False)
 
         return expr
+
+    @property
+    def is_Scalar(self):
+        return self.lhs.is_Symbol
+
+    @property
+    def is_Tensor(self):
+        return self.lhs.is_Indexed
