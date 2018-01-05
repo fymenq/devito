@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from devito.ir.support import Schedule, Scope
+from devito.ir.support import Scope
 from devito.ir.clusters.cluster import PartialCluster, ClusterGroup
 from devito.symbolics import xreplace_indices
 from devito.types import Scalar
@@ -189,9 +189,7 @@ def clusterize(exprs):
     for i, e1 in enumerate(exprs):
         trace = [e2 for e2 in exprs[:i] if Scope([e2, e1]).has_dep] + [e1]
         trace.extend([e2 for e2 in exprs[i+1:] if Scope([e1, e2]).has_dep])
-        # Note: the time dimension has priority
-        ispace = Schedule(e1.dspace.negate(), lambda i: not i.dim.is_Time)
-        mapper[e1] = Bunch(trace=trace, ispace=ispace)
+        mapper[e1] = Bunch(trace=trace, ispace=e1.dspace.negate())
 
     # Derive the iteration spaces
     queue = list(mapper)
