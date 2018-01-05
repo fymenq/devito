@@ -1,7 +1,11 @@
+from operator import attrgetter
+
 import sympy
 
-from devito.ir.support import Stencil
-from devito.symbolics import indexify
+from devito.dimension import Dimension
+from devito.ir.support import Box, Interval, Stencil
+from devito.symbolics import indexify, retrieve_indexed
+from devito.tools import filter_sorted, partial_order
 
 __all__ = ['Eq']
 
@@ -19,7 +23,7 @@ class Eq(sympy.Eq):
     :class:`Dimension`s are extracted from the :class:`Indexed`s of the equation.
     """
 
-    def __new__(cls, input_expr, dspace=None, subs=None):
+    def __new__(cls, input_expr, subs=None):
         # Sanity check
         assert isinstance(input_expr, sympy.Eq)
 
@@ -31,18 +35,30 @@ class Eq(sympy.Eq):
             expr = expr.xreplace(subs)
 
         expr = super(Eq, cls).__new__(cls, expr.lhs, expr.rhs, evaluate=False)
+        expr.is_Increment = getattr(input_expr, 'is_Increment', False)
 
         # Data space derivation
-        if dspace is not None:
-            expr.dspace = dspace
-        else:
-            stencil = Stencil(expr)
-            stencil = stencil.replace({d.parent: d for d in stencil.dimensions
-                                       if d.is_Stepping})
-            expr.dspace = stencil.boxify()
-
-        # Was this an Increment?
-        expr.is_Increment = getattr(input_expr, 'is_Increment', False)
+        # 1) Detect data accesses
+        stencil = Stencil(expr)
+        dims = {i for i in expr.free_symbols if isinstance(i, Dimension)}
+        free_dims = tuple(filter_sorted(dims - set(stencil), key=attrgetter('name')))
+        # 2) Normalized dimension ordering
+        # TODO: move to a separate routine
+        indexeds = retrieve_indexed(expr, mode='all')
+        constraints = [tuple(i.indices) for i in indexeds] + [free_dims]
+        for i, constraint in enumerate(list(constraints)):
+            normalized = []
+            for j in constraint:
+                found = [d for d in j.free_symbols if isinstance(d, Dimension)]
+                normalized.extend([d for d in found if d not in normalized])
+            constraints[i] = normalized
+        ordering = sorted(partial_order(constraints), key=lambda i: not i.is_Time)
+        # 3) Do not track parent dimensions
+        parents = [d.parent for d in ordering if d.is_Stepping]
+        ordering = [i for i in ordering if i not in parents]
+        # 4) Store the data space as a Box
+        expr.dspace = Box([Interval(i, min(stencil.get(i)), max(stencil.get(i)))
+                           for i in ordering])
 
         return expr
 
