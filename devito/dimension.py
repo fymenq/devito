@@ -2,7 +2,7 @@ import sympy
 from cached_property import cached_property
 
 from devito.arguments import DimensionArgProvider
-from devito.types import Symbol
+from devito.types import Scalar, Symbol
 
 __all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension']
 
@@ -26,7 +26,7 @@ class Dimension(sympy.Symbol, DimensionArgProvider):
     def __new__(cls, name, **kwargs):
         newobj = sympy.Symbol.__new__(cls, name)
         newobj.reverse = kwargs.get('reverse', False)
-        newobj.spacing = kwargs.get('spacing', sympy.Symbol('h_%s' % name))
+        newobj.spacing = kwargs.get('spacing', Scalar(name='h_%s' % name))
         return newobj
 
     def __str__(self):
