@@ -184,7 +184,7 @@ def bump_and_contract(targets, source, sink):
 def clusterize(exprs):
     """Group a sequence of :class:`ir.Eq`s into one or more :class:`Cluster`s."""
 
-    # Build a dependency graph for the input exprs
+    # Build a graph capturing the dependencies among the input tensor expressions
     mapper = OrderedDict()
     for i, e1 in enumerate(exprs):
         trace = [e2 for e2 in exprs[:i] if Scope([e2, e1]).has_dep] + [e1]
@@ -207,11 +207,12 @@ def clusterize(exprs):
             mapper[target].ispace = coerced_ispace
             queue.extend([i for i in mapper[target].trace if i not in queue])
 
-    # Include scalar (temporary) expressions
+    # Build a PartialCluster for each tensor expression
     clusters = ClusterGroup()
     for k, v in mapper.items():
-        exprs = [i for i in v.trace[:v.trace.index(k)] if i.lhs.is_Symbol] + [k]
-        clusters.append(PartialCluster(exprs, v.ispace))
+        if k.is_Tensor:
+            scalars = [i for i in v.trace[:v.trace.index(k)] if i.is_Scalar]
+            clusters.append(PartialCluster(scalars + [k], v.ispace))
 
     # Group PartialClusters together where possible
     clusters = groupby(clusters)

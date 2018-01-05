@@ -67,7 +67,7 @@ class Cluster(PartialCluster):
     """A Cluster is an immutable :class:`PartialCluster`."""
 
     def __init__(self, exprs, ispace):
-        self._exprs = tuple(Eq(*i.args) for i in exprs)
+        self._exprs = tuple(Eq(*i.args, evaluate=False) for i in exprs)
         self._ispace = ispace
 
     @cached_property
