@@ -1,10 +1,11 @@
 import abc
+from collections import OrderedDict
 
 import numpy as np
 
 from devito.tools import as_tuple
 
-__all__ = ['NullInterval', 'Interval', 'Box', 'Schedule']
+__all__ = ['NullInterval', 'Interval', 'Box']
 
 
 class AbstractInterval(object):
@@ -155,20 +156,16 @@ class Box(object):
 
     """
     A bag of :class:`Interval`s.
+
+    It is guaranteed that the intevals original ordering is honored.
     """
 
     def __init__(self, intervals):
         self.intervals = as_tuple(intervals)
 
-    def __repr_key__(self, interval):
-        lower = -np.inf if interval.is_Null else interval.lower
-        upper = np.inf if interval.is_Null else interval.upper
-        return (interval.dim.name, lower, upper)
-
     def __repr__(self):
-        intervals = sorted(self.intervals, key=self.__repr_key__)
         return "%s[%s]" % (self.__class__.__name__,
-                           ', '.join([repr(i) for i in intervals]))
+                           ', '.join([repr(i) for i in self.intervals]))
 
     def __eq__(self, o):
         return set(self.intervals) == set(o.intervals)
@@ -179,21 +176,21 @@ class Box(object):
 
     @classmethod
     def intersection_update(self, *boxes):
-        mapper = {}
+        mapper = OrderedDict()
         for i in boxes:
             for interval in i.intervals:
                 mapper.setdefault(interval.dim, []).append(interval)
         return Box([Interval.op(v, 'intersection') for v in mapper.values()])
 
     def intersection(self, *boxes):
-        mapper = {i.dim: [i] for i in self.intervals}
+        mapper = OrderedDict([(i.dim, [i]) for i in self.intervals])
         for i in boxes:
             for interval in i.intervals:
                 mapper.get(interval.dim, []).append(interval)
         return Box([Interval.op(v, 'intersection') for v in mapper.values()])
 
     def subtract(self, o):
-        mapper = {i.dim: i for i in o.intervals}
+        mapper = OrderedDict([(i.dim, i) for i in o.intervals])
         intervals = [i.subtract(mapper.get(i.dim, NullInterval(i.dim)))
                      for i in self.intervals]
         return Box(intervals)
@@ -203,33 +200,3 @@ class Box(object):
 
     def negate(self):
         return Box([i.negate() for i in self.intervals])
-
-
-class Schedule(Box):
-
-    """
-    A special :class:`Box` with ordered intervals. The ordering is established
-    through a callable ``key`` which accepts as input a :class:`Interval` and
-    returns a value.
-    """
-
-    def __init__(self, maybe_box, key):
-        assert callable(key)
-        intervals = maybe_box.intervals if isinstance(maybe_box, Box) else maybe_box
-        self.intervals = as_tuple(sorted(intervals, key=key))
-        self.key = key
-
-    def __repr_key__(self, interval):
-        return (self.key(interval),) + super(Schedule, self).__repr_key__(interval)
-
-    def intersection(self, *boxes):
-        return Schedule(super(Schedule, self).intersection(*boxes), key=self.key)
-
-    def subtract(self, o):
-        return Schedule(super(Schedule, self).subtract(o), key=self.key)
-
-    def drop(self, d):
-        return Schedule(super(Schedule, self).drop(d), key=self.key)
-
-    def negate(self):
-        return Schedule(super(Schedule, self).negate(), key=self.key)
