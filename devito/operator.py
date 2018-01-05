@@ -96,7 +96,7 @@ class Operator(Callable):
 
         # Parameters of the Operator (Dimensions necessary for data casts)
         parameters = self.input + self.dimensions
-
+        print(expressions, stencils)
         # Group expressions based on their Stencil and data dependences
         clusters = clusterize(expressions, stencils)
 

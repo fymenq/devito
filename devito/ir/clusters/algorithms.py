@@ -17,17 +17,23 @@ def groupby(clusters):
     identical stencil have been squashed into a single :class:`PartialCluster`.
     """
     clusters = clusters.unfreeze()
+    print([c.stencil for c in clusters])
 
     # Attempt cluster fusion
     processed = ClusterGroup()
+    print(processed)
+    print("2222")
     for c in clusters:
         fused = False
         for candidate in reversed(list(processed)):
+            print(candidate.stencil)
             # Check all data dependences relevant for cluster fusion
             scope = Scope(exprs=candidate.exprs + c.exprs)
             anti = scope.d_anti.carried() - scope.d_anti.increment
             flow = scope.d_flow - (scope.d_flow.inplace() + scope.d_flow.increment)
             funcs = [i.function for i in anti]
+            print(funcs)
+            print("33333")
             if candidate.stencil == c.stencil and\
                     all(is_local(i, candidate, c, clusters) for i in funcs):
                 # /c/ will be fused into /candidate/. All fusion-induced anti
@@ -55,7 +61,8 @@ def groupby(clusters):
         # Fallback
         if not fused:
             processed.append(c)
-
+    print(processed)
+    print("1111")
     return processed.freeze()
 
 
