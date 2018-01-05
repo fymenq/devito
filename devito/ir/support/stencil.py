@@ -4,7 +4,7 @@ from sympy import Eq
 
 from devito.dimension import Dimension
 from devito.ir.support.domain import Interval, Box
-from devito.symbolics import retrieve_indexed, retrieve_terminals
+from devito.symbolics import retrieve_indexed
 from devito.tools import DefaultOrderedDict, flatten
 
 __all__ = ['Stencil']
@@ -56,14 +56,9 @@ class Stencil(DefaultOrderedDict):
         """
         Compute the stencil of ``expr``.
         """
-        assert expr.is_Equality
-
-        # Collect all indexed objects appearing in /expr/
-        terminals = retrieve_terminals(expr, mode='all')
-        indexeds = [i for i in terminals if i.is_Indexed]
+        indexeds = retrieve_indexed(expr, mode='all')
         indexeds += flatten([retrieve_indexed(i) for i in e.indices] for e in indexeds)
 
-        # Determine the points accessed along each dimension
         stencil = Stencil()
         for e in indexeds:
             for a in e.indices:
@@ -159,21 +154,6 @@ class Stencil(DefaultOrderedDict):
         Create a :class:`Box` from ``self``, with as many intervals as dimensions.
         """
         return Box([Interval(k, min(v), max(v)) for k, v in self.items()])
-
-    def replace(self, mapper):
-        """
-        Return a new Stencil in which a key ``k`` (dimension) appearing in
-        ``mapper``  is replaced by ``mapper[k]``. The original order is therefore
-        unchangend, but a new dictionary is produced with potentially different
-        keys.
-        """
-        output = Stencil()
-        for k, v in self.items():
-            if k not in mapper:
-                output[k] = v
-            else:
-                output[mapper[k]] = self[mapper[k]]
-        return output
 
     def __eq__(self, other):
         return self.entries == other.entries
