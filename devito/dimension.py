@@ -160,7 +160,7 @@ class SubsampledDimension(DerivedDimension):
         return newobj
 
     def _hashable_content(self):
-        return (self.parent._hashable_content(), self.modulo)
+        return (self.parent._hashable_content(), self.factor)
 
 
 class LoweredDimension(Dimension):
