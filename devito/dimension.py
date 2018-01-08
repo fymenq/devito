@@ -1,4 +1,3 @@
-import sympy
 from cached_property import cached_property
 
 from devito.arguments import DimensionArgProvider
@@ -7,11 +6,12 @@ from devito.types import Scalar, Symbol
 __all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension']
 
 
-class Dimension(sympy.Symbol, DimensionArgProvider):
+class Dimension(Symbol, DimensionArgProvider):
 
     is_Space = False
     is_Time = False
 
+    is_Derived = False
     is_Stepping = False
     is_Lowered = False
 
@@ -19,15 +19,15 @@ class Dimension(sympy.Symbol, DimensionArgProvider):
     defines a potential iteration space.
 
     :param name: Name of the dimension symbol.
-    :param reverse: Traverse dimension in reverse order (default False)
+    :param reverse: Optional, Traverse dimension in reverse order (default False)
     :param spacing: Optional, symbol for the spacing along this dimension.
     """
 
-    def __new__(cls, name, **kwargs):
-        newobj = sympy.Symbol.__new__(cls, name)
-        newobj.reverse = kwargs.get('reverse', False)
-        newobj.spacing = kwargs.get('spacing', Scalar(name='h_%s' % name))
-        return newobj
+    def __init__(self, *args, **kwargs):
+        if not self._cached():
+            super(Dimension, self).__init__(*args, **kwargs)
+            self._reverse = kwargs.get('reverse', False)
+            self._spacing = kwargs.get('spacing', Scalar(name='h_%s' % self.name))
 
     def __str__(self):
         return self.name
@@ -69,6 +69,20 @@ class Dimension(sympy.Symbol, DimensionArgProvider):
     def end_name(self):
         return "%s_e" % self.name
 
+    @property
+    def reverse(self):
+        return self._reverse
+
+    @property
+    def spacing(self):
+        return self._spacing
+
+    @reverse.setter
+    def reverse(self, val):
+        # TODO: this is an outrageous hack. TimeFunctions are updating this value
+        # at construction time. This is a symptom we need local and global dimensions
+        self._reverse = val
+
     def _hashable_content(self):
         return super(Dimension, self)._hashable_content() +\
             (self.reverse, self.spacing)
@@ -107,6 +121,7 @@ class TimeDimension(Dimension):
 
 class SteppingDimension(Dimension):
 
+    is_Derived = True
     is_Stepping = True
 
     """
@@ -117,17 +132,30 @@ class SteppingDimension(Dimension):
     :param parent: Parent dimension over which to loop in modulo fashion.
     """
 
-    def __new__(cls, name, parent, **kwargs):
-        newobj = sympy.Symbol.__new__(cls, name)
-        assert isinstance(parent, Dimension)
-        newobj.parent = parent
-        newobj.modulo = kwargs.get('modulo', 2)
+    def __init__(self, *args, **kwargs):
+        if not self._cached():
+            super(SteppingDimension, self).__init__(*args, **kwargs)
+            self._modulo = kwargs.get('modulo', 2)
+            self._parent = kwargs['parent']
 
-        # Inherit time/space identifiers
-        cls.is_Time = parent.is_Time
-        cls.is_Space = parent.is_Space
+            # Inherit time/space identifiers
+            assert isinstance(self.parent, Dimension)
+            self.is_Time = self.parent.is_Time
+            self.is_Space = self.parent.is_Space
 
-        return newobj
+    @property
+    def parent(self):
+        return self._parent
+
+    @property
+    def modulo(self):
+        return self._modulo
+
+    @modulo.setter
+    def modulo(self, val):
+        # TODO: this is an outrageous hack. TimeFunctions are updating this value
+        # at construction time. This is a symptom we need local and global dimensions
+        self._modulo = val
 
     @property
     def reverse(self):
@@ -154,24 +182,28 @@ class LoweredDimension(Dimension):
     :param offset: Offset value used in the modulo iteration.
     """
 
-    def __new__(cls, name, stepping, offset, **kwargs):
-        newobj = sympy.Symbol.__new__(cls, name)
-        assert isinstance(stepping, SteppingDimension)
-        newobj.stepping = stepping
-        newobj.offset = offset
-        return newobj
+    def __init__(self, *args, **kwargs):
+        if not self._cached():
+            super(LoweredDimension, self).__init__(*args, **kwargs)
+            self._stepping = kwargs['stepping']
+            self._offset = kwargs['offset']
+            assert isinstance(self.stepping, SteppingDimension)
 
     @property
     def origin(self):
         return self.stepping + self.offset
 
     @property
-    def size(self):
-        return self.stepping.size
-
-    @property
     def reverse(self):
         return self.stepping.reverse
 
+    @property
+    def stepping(self):
+        return self._stepping
+
+    @property
+    def offset(self):
+        return self._offset
+
     def _hashable_content(self):
-        return sympy.Symbol._hashable_content(self) + (self.stepping, self.offset)
+        return Symbol._hashable_content(self) + (self.stepping, self.offset)
