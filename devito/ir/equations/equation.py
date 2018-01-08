@@ -1,11 +1,7 @@
-from operator import attrgetter
-
 import sympy
 
-from devito.dimension import Dimension
 from devito.ir.support import Box, Interval, Stencil
-from devito.symbolics import indexify, retrieve_indexed
-from devito.tools import filter_sorted, partial_order
+from devito.symbolics import dimension_sort, indexify
 
 __all__ = ['Eq']
 
@@ -37,26 +33,13 @@ class Eq(sympy.Eq):
         expr = super(Eq, cls).__new__(cls, expr.lhs, expr.rhs, evaluate=False)
         expr.is_Increment = getattr(input_expr, 'is_Increment', False)
 
-        # Data space derivation
-        # 1) Detect data accesses
-        stencil = Stencil(expr)
-        dims = {i for i in expr.free_symbols if isinstance(i, Dimension)}
-        free_dims = tuple(filter_sorted(dims - set(stencil), key=attrgetter('name')))
-        # 2) Normalized dimension ordering
-        # TODO: move to a separate routine
-        indexeds = retrieve_indexed(expr, mode='all')
-        constraints = [tuple(i.indices) for i in indexeds] + [free_dims]
-        for i, constraint in enumerate(list(constraints)):
-            normalized = []
-            for j in constraint:
-                found = [d for d in j.free_symbols if isinstance(d, Dimension)]
-                normalized.extend([d for d in found if d not in normalized])
-            constraints[i] = normalized
-        ordering = sorted(partial_order(constraints), key=lambda i: not i.is_Time)
-        # 3) Do not track parent dimensions
+        # Well-defined dimension ordering
+        ordering = dimension_sort(expr, key=lambda i: not i.is_Time)
         parents = [d.parent for d in ordering if d.is_Stepping]
         ordering = [i for i in ordering if i not in parents]
-        # 4) Store the data space as a Box
+
+        # Data space derivation
+        stencil = Stencil(expr)
         expr.dspace = Box([Interval(i, min(stencil.get(i)), max(stencil.get(i)))
                            for i in ordering])
 
