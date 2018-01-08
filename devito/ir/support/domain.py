@@ -1,8 +1,6 @@
 import abc
 from collections import OrderedDict
 
-import numpy as np
-
 from devito.tools import as_tuple
 
 __all__ = ['NullInterval', 'Interval', 'Box']
