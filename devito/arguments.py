@@ -214,11 +214,6 @@ class DimensionArgProvider(ArgumentProvider):
         child_values = tuple([i.value for i in self.rtargs])
         return child_values if all(i is not None for i in child_values) else None
 
-    @property
-    def dtype(self):
-        """The data type of the iteration variable"""
-        return np.int32
-
     @cached_property
     def rtargs(self):
         size = ScalarArgument(self.size_name, self, max)
