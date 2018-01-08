@@ -492,7 +492,7 @@ def make_stencils(expressions):
     dimensions = set.union(*[set(i.dimensions) for i in stencils])
 
     # Filter out aliasing stepping dimensions
-    mapper = {d.parent: d for d in dimensions if d.is_Stepping}
+    mapper = {d: d.parent for d in dimensions if d.is_Derived}
     return [i.replace(mapper) for i in stencils]
 
 
