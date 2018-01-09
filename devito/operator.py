@@ -101,7 +101,7 @@ class Operator(Callable):
         nodes = self._schedule_expressions(clusters)
 
         # Data dependency analysis. Properties are attached directly to nodes
-        nodes = analyze_iterations(nodes)
+        nodes = analyze_iet(nodes)
 
         # Introduce C-level profiling infrastructure
         nodes, self.profiler = self._profile_sections(nodes, parameters)

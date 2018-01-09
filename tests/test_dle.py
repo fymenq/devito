@@ -14,8 +14,7 @@ from devito.dle.backends import DevitoRewriter as Rewriter
 from devito import Grid, Function, TimeFunction, Eq, Operator
 from devito.ir.iet import (ELEMENTAL, Expression, Callable, Iteration, List, tagger,
                            ResolveTimeStepping, SubstituteExpression,
-                           Transformer, FindNodes, analyze_iterations,
-                           retrieve_iteration_tree)
+                           Transformer, FindNodes, analyze_iet, retrieve_iteration_tree)
 
 
 @pytest.fixture(scope="module")
@@ -418,7 +417,7 @@ def test_loops_ompized(fa, fb, fc, fd, t0, t1, t2, t3, exprs, expected, iters):
     node_exprs = [Expression(EVAL(i, *scope)) for i in exprs]
     ast = iters[6](iters[7](node_exprs))
 
-    ast = analyze_iterations(ast)
+    ast = analyze_iet(ast)
 
     nodes = transform(ast, mode='openmp').nodes
     iterations = FindNodes(Iteration).visit(nodes)
