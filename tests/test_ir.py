@@ -4,7 +4,7 @@ from conftest import EVAL, time, x, y, z, skipif_yask  # noqa
 
 from devito import Eq  # noqa
 from devito.ir.support.basic import IterationInstance, TimedAccess, Scope
-from devito.ir.support.domain import NullInterval, Interval, Box
+from devito.ir.support.domain import NullInterval, Interval, Space
 
 
 @pytest.fixture(scope="session")
@@ -378,13 +378,13 @@ def test_intervals_union():
     nully = NullInterval(y)
     iy = Interval(y, -2, 2)
 
-    # Mixed disjoint (note: Box input order is irrelevant)
-    assert ix.union(ix4) == Box([ix4, ix])
+    # Mixed disjoint (note: Space input order is irrelevant)
+    assert ix.union(ix4) == Space([ix4, ix])
     assert ix.union(ix5) == Interval(x, -3, 2)
-    assert ix6.union(ix) == Box([ix, ix6])
-    assert ix.union(nully) == Box([ix, nully])
-    assert ix.union(iy) == Box([iy, ix])
-    assert iy.union(ix) == Box([iy, ix])
+    assert ix6.union(ix) == Space([ix, ix6])
+    assert ix.union(nully) == Space([ix, nully])
+    assert ix.union(iy) == Space([iy, ix])
+    assert iy.union(ix) == Space([iy, ix])
 
 
 @skipif_yask
