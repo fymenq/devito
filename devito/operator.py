@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 from operator import attrgetter
 
 import ctypes
@@ -8,7 +8,6 @@ import numpy as np
 import sympy
 
 from devito.arguments import infer_dimension_values_tuple
-from devito.cgen_utils import Allocator
 from devito.compiler import jit_compile, load
 from devito.dimension import Dimension
 from devito.dle import transform
@@ -18,9 +17,7 @@ from devito.function import Forward, Backward, CompositeFunction
 from devito.logger import bar, error, info
 from devito.ir.equations import Eq
 from devito.ir.clusters import clusterize
-from devito.ir.iet import (Element, Callable, List, LocalExpression,
-                           MapExpressions, Transformer, NestedTransformer,
-                           build_iet, analyze_iet, filter_iterations)
+from devito.ir.iet import (Callable, List, MetaCall, iet_build, iet_insert_C_decls)
 from devito.parameters import configuration
 from devito.profiling import create_profile
 from devito.symbolics import retrieve_terminals
@@ -97,10 +94,7 @@ class Operator(Callable):
         self.offsets = retrieve_offsets(clusters.ispace)
 
         # Lower Clusters to an Iteration/Expression tree (IET)
-        nodes = build_iet(clusters, self.dtype)
-
-        # Data dependency analysis. Properties are attached directly to nodes
-        nodes = analyze_iet(nodes)
+        nodes = iet_build(clusters, self.dtype)
 
         # Introduce C-level profiling infrastructure
         nodes, self.profiler = self._profile_sections(nodes, parameters)
@@ -114,15 +108,15 @@ class Operator(Callable):
         # Update the Operator state based on the DLE
         self.dle_arguments = dle_state.arguments
         self.dle_flags = dle_state.flags
-        self.func_table.update(OrderedDict([(i.name, FunMeta(i, True))
+        self.func_table.update(OrderedDict([(i.name, MetaCall(i, True))
                                             for i in dle_state.elemental_functions]))
         parameters.extend([i.argument for i in self.dle_arguments])
         self.dimensions.extend([i.argument for i in self.dle_arguments
                                 if isinstance(i.argument, Dimension)])
         self._includes.extend(list(dle_state.includes))
 
-        # Introduce all required C declarations
-        nodes = self._insert_declarations(dle_state.nodes)
+        # Introduce the required symbol declarations
+        nodes = iet_insert_C_decls(dle_state.nodes, self.func_table)
 
         # Finish instantiation
         super(Operator, self).__init__(self.name, nodes, 'int', parameters, ())
@@ -288,54 +282,6 @@ class Operator(Callable):
         lower-level tool."""
         return nodes
 
-    def _insert_declarations(self, nodes):
-        """Populate the Operator's body with the necessary variable declarations."""
-
-        # Resolve function calls first
-        scopes = []
-        me = MapExpressions()
-        for k, v in me.visit(nodes).items():
-            if k.is_Call:
-                func = self.func_table[k.name]
-                if func.local:
-                    scopes.extend(me.visit(func.root, queue=list(v)).items())
-            else:
-                scopes.append((k, v))
-
-        # Determine all required declarations
-        allocator = Allocator()
-        mapper = OrderedDict()
-        for k, v in scopes:
-            if k.is_scalar:
-                # Inline declaration
-                mapper[k] = LocalExpression(**k.args)
-            elif k.write._mem_external:
-                # Nothing to do, variable passed as kernel argument
-                continue
-            elif k.write._mem_stack:
-                # On the stack, as established by the DLE
-                key = lambda i: not i.is_Parallel
-                site = filter_iterations(v, key=key, stop='asap') or [nodes]
-                allocator.push_stack(site[-1], k.write)
-            else:
-                # On the heap, as a tensor that must be globally accessible
-                allocator.push_heap(k.write)
-
-        # Introduce declarations on the stack
-        for k, v in allocator.onstack:
-            mapper[k] = tuple(Element(i) for i in v)
-        nodes = NestedTransformer(mapper).visit(nodes)
-        for k, v in list(self.func_table.items()):
-            if v.local:
-                self.func_table[k] = FunMeta(Transformer(mapper).visit(v.root), v.local)
-
-        # Introduce declarations on the heap (if any)
-        if allocator.onheap:
-            decls, allocs, frees = zip(*allocator.onheap)
-            nodes = List(header=decls + allocs, body=nodes, footer=frees)
-
-        return nodes
-
 
 class OperatorRunnable(Operator):
     """
@@ -434,13 +380,6 @@ def retrieve_offsets(ispace):
 
 
 # Misc helpers
-
-
-FunMeta = namedtuple('FunMeta', 'root local')
-"""
-Metadata for functions called by an Operator. ``local = True`` means that
-the function was generated by Devito itself.
-"""
 
 
 def set_dse_mode(mode):

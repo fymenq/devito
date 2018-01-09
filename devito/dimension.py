@@ -185,25 +185,11 @@ class LoweredDimension(Dimension):
     def __init__(self, *args, **kwargs):
         if not self._cached():
             super(LoweredDimension, self).__init__(*args, **kwargs)
-            self._stepping = kwargs['stepping']
-            self._offset = kwargs['offset']
-            assert isinstance(self.stepping, SteppingDimension)
+            self._origin = kwargs['origin']
 
     @property
     def origin(self):
-        return self.stepping + self.offset
-
-    @property
-    def reverse(self):
-        return self.stepping.reverse
-
-    @property
-    def stepping(self):
-        return self._stepping
-
-    @property
-    def offset(self):
-        return self._offset
+        return self._origin
 
     def _hashable_content(self):
-        return Symbol._hashable_content(self) + (self.stepping, self.offset)
+        return Symbol._hashable_content(self) + (self.origin)

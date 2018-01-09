@@ -13,7 +13,7 @@ from devito.ir.iet import (Iteration, SEQUENTIAL, PARALLEL, VECTOR, WRAPPABLE,
 from devito.ir.support import Scope
 from devito.tools import as_tuple
 
-__all__ = ['analyze_iet']
+__all__ = ['iet_analyze']
 
 
 class Analysis(object):
@@ -39,7 +39,7 @@ def propertizer(func):
     return wrapper
 
 
-def analyze_iet(iet):
+def iet_analyze(iet):
     """
     Attach :class:`IterationProperty` to :class:`Iteration` objects within
     ``nodes``. The recognized IterationProperty decorators are listed in
