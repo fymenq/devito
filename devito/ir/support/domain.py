@@ -3,7 +3,7 @@ from collections import OrderedDict
 
 from devito.tools import as_tuple
 
-__all__ = ['NullInterval', 'Interval', 'Box']
+__all__ = ['NullInterval', 'Interval', 'Space', 'IterationSpace']
 
 
 class AbstractInterval(object):
@@ -70,7 +70,7 @@ class NullInterval(AbstractInterval):
         if self.dim == o.dim:
             return o._rebuild()
         else:
-            return Box([self._rebuild(), o._rebuild()])
+            return Space([self._rebuild(), o._rebuild()])
 
     def overlap(self, o):
         return False
@@ -119,7 +119,7 @@ class Interval(AbstractInterval):
         elif o.is_Null and self.dim == o.dim:
             return self._rebuild()
         else:
-            return Box([self._rebuild(), o._rebuild()])
+            return Space([self._rebuild(), o._rebuild()])
 
     def subtract(self, o):
         if self.dim != o.dim or o.is_Null:
@@ -150,12 +150,12 @@ class Interval(AbstractInterval):
         return hash((self.dim.name, self.lower, self.upper))
 
 
-class Box(object):
+class Space(object):
 
     """
     A bag of :class:`Interval`s.
 
-    It is guaranteed that the intevals original ordering is honored.
+    The intervals input ordering is honored.
     """
 
     def __init__(self, intervals):
@@ -168,33 +168,53 @@ class Box(object):
     def __eq__(self, o):
         return set(self.intervals) == set(o.intervals)
 
+    def _construct(self, intervals):
+        return Space(intervals)
+
     @property
     def empty(self):
         return len(self.intervals) == 0
 
     @classmethod
-    def intersection_update(self, *boxes):
+    def intersection_update(self, *spaces):
         mapper = OrderedDict()
-        for i in boxes:
+        for i in spaces:
             for interval in i.intervals:
                 mapper.setdefault(interval.dim, []).append(interval)
-        return Box([Interval.op(v, 'intersection') for v in mapper.values()])
+        return Space([Interval.op(v, 'intersection') for v in mapper.values()])
 
-    def intersection(self, *boxes):
+    def intersection(self, *spaces):
         mapper = OrderedDict([(i.dim, [i]) for i in self.intervals])
-        for i in boxes:
+        for i in spaces:
             for interval in i.intervals:
                 mapper.get(interval.dim, []).append(interval)
-        return Box([Interval.op(v, 'intersection') for v in mapper.values()])
+        return self._construct([Interval.op(v, 'intersection') for v in mapper.values()])
 
     def subtract(self, o):
         mapper = OrderedDict([(i.dim, i) for i in o.intervals])
         intervals = [i.subtract(mapper.get(i.dim, NullInterval(i.dim)))
                      for i in self.intervals]
-        return Box(intervals)
+        return self._construct(intervals)
 
     def drop(self, d):
-        return Box([i._rebuild() for i in self.intervals if i.dim not in as_tuple(d)])
+        return self._construct([i._rebuild() for i in self.intervals
+                                if i.dim not in as_tuple(d)])
 
     def negate(self):
-        return Box([i.negate() for i in self.intervals])
+        return self._construct([i.negate() for i in self.intervals])
+
+
+class IterationSpace(Space):
+
+    """
+    A :class:`Space` associating one or more :class:`Dimension`s to a
+    :class:`Interval`. The interval is the data space, whereas the dimensions
+    are the objects used to traverse the data space.
+    """
+
+    def __init__(self, intervals, sub_iterators):
+        super(IterationSpace, self).__init__(intervals)
+        self.sub_iterators = sub_iterators
+
+    def _construct(self, intervals):
+        return IterationSpace(intervals, self.sub_iterators)
