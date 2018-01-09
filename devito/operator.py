@@ -18,10 +18,9 @@ from devito.function import Forward, Backward, CompositeFunction
 from devito.logger import bar, error, info
 from devito.ir.equations import Eq
 from devito.ir.clusters import clusterize
-from devito.ir.iet import (Element, Expression, Callable, Iteration, List,
-                           LocalExpression, MapExpressions, ResolveTimeStepping,
-                           SubstituteExpression, Transformer, NestedTransformer,
-                           analyze_iterations, compose_nodes, filter_iterations)
+from devito.ir.iet import (Element, Callable, List, LocalExpression,
+                           MapExpressions, Transformer, NestedTransformer,
+                           build_iet, analyze_iet, filter_iterations)
 from devito.parameters import configuration
 from devito.profiling import create_profile
 from devito.symbolics import retrieve_terminals
@@ -97,18 +96,14 @@ class Operator(Callable):
         clusters = rewrite(clusters, mode=set_dse_mode(dse))
         self.offsets = retrieve_offsets(clusters.ispace)
 
-        # Wrap expressions with Iterations according to dimensions
-        nodes = self._schedule_expressions(clusters)
+        # Lower Clusters to an Iteration/Expression tree (IET)
+        nodes = build_iet(clusters, self.dtype)
 
         # Data dependency analysis. Properties are attached directly to nodes
         nodes = analyze_iet(nodes)
 
         # Introduce C-level profiling infrastructure
         nodes, self.profiler = self._profile_sections(nodes, parameters)
-
-        # Resolve and substitute dimensions for loop index variables
-        nodes, subs = ResolveTimeStepping().visit(nodes)
-        nodes = SubstituteExpression(subs=subs).visit(nodes)
 
         # Translate into backend-specific representation (e.g., GPU, Yask)
         nodes = self._specialize(nodes, parameters)
@@ -286,54 +281,6 @@ class Operator(Callable):
         """Use auto-tuning on this Operator to determine empirically the
         best block sizes when loop blocking is in use."""
         return arguments
-
-    def _schedule_expressions(self, clusters):
-        """Create an Iteartion/Expression tree given an iterable of
-        :class:`Cluster` objects."""
-
-        # Build the Iteration/Expression tree
-        processed = []
-        schedule = OrderedDict()
-        for i in clusters:
-            # Build the Expression objects to be inserted within an Iteration tree
-            expressions = [Expression(v, np.int32 if i.trace.is_index(k) else self.dtype)
-                           for k, v in i.trace.items()]
-
-            if not i.ispace.empty:
-                root = None
-                entries = i.ispace.intervals
-
-                # Can I reuse any of the previously scheduled Iterations ?
-                index = 0
-                for j0, j1 in zip(entries, list(schedule)):
-                    if j0 != j1 or j0.dim in clusters.atomics[i]:
-                        break
-                    root = schedule[j1]
-                    index += 1
-                needed = entries[index:]
-
-                # Build and insert the required Iterations
-                iters = [Iteration([], j.dim, j.dim.limits, offsets=j.limits)
-                         for j in needed]
-                body, tree = compose_nodes(iters + [expressions], retrieve=True)
-                scheduling = OrderedDict(zip(needed, tree))
-                if root is None:
-                    processed.append(body)
-                    schedule = scheduling
-                else:
-                    nodes = list(root.nodes) + [body]
-                    mapper = {root: root._rebuild(nodes, **root.args_frozen)}
-                    transformer = Transformer(mapper)
-                    processed = list(transformer.visit(processed))
-                    schedule = OrderedDict(list(schedule.items())[:index] +
-                                           list(scheduling.items()))
-                    for k, v in list(schedule.items()):
-                        schedule[k] = transformer.rebuilt.get(v, v)
-            else:
-                # No Iterations are needed
-                processed.extend(expressions)
-
-        return List(body=processed)
 
     def _specialize(self, nodes, parameters):
         """Transform the Iteration/Expression tree into a backend-specific
