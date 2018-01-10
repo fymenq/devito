@@ -227,7 +227,7 @@ def test_index_alignment(const):
     # = 3*3 + 2*2 + 1*1 + 0*0
     prod_eqn = Eq(prod, prod + u * v)
     comb_op = Operator([adj_eqn, prod_eqn], time_axis=Backward)
-    comb_op(time=nt-order_of_eqn, constant=1)
+    comb_op(time=nt, constant=1)
     final_value = sum([n**2 for n in range(nt)])
     # Final value should be sum of squares of first nt natural numbers
     assert(np.allclose(prod.data, final_value))
