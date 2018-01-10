@@ -13,8 +13,7 @@ from devito.dle import transform
 from devito.dle.backends import DevitoRewriter as Rewriter
 from devito import Grid, Function, TimeFunction, Eq, Operator
 from devito.ir.iet import (ELEMENTAL, Expression, Callable, Iteration, List, tagger,
-                           SubstituteExpression, Transformer, FindNodes, iet_analyze,
-                           retrieve_iteration_tree)
+                           Transformer, FindNodes, iet_analyze, retrieve_iteration_tree)
 
 
 @pytest.fixture(scope="module")
