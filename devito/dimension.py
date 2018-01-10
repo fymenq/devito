@@ -1,13 +1,15 @@
 from cached_property import cached_property
+import sympy
 
 from devito.arguments import DimensionArgProvider
-from devito.types import Scalar, Symbol
+from devito.types import AbstractSymbol, Scalar, Symbol
 
 __all__ = ['Dimension', 'SpaceDimension', 'TimeDimension', 'SteppingDimension']
 
 
-class Dimension(Symbol, DimensionArgProvider):
+class Dimension(AbstractSymbol, DimensionArgProvider):
 
+    is_Dimension = True
     is_Space = False
     is_Time = False
 
@@ -15,19 +17,20 @@ class Dimension(Symbol, DimensionArgProvider):
     is_Stepping = False
     is_Lowered = False
 
-    """Index object that represents a problem dimension and thus
-    defines a potential iteration space.
+    """
+    Index object that represents a problem dimension and thus defines a
+    potential iteration space.
 
     :param name: Name of the dimension symbol.
     :param reverse: Optional, Traverse dimension in reverse order (default False)
     :param spacing: Optional, symbol for the spacing along this dimension.
     """
 
-    def __init__(self, *args, **kwargs):
-        if not self._cached():
-            super(Dimension, self).__init__(*args, **kwargs)
-            self._reverse = kwargs.get('reverse', False)
-            self._spacing = kwargs.get('spacing', Scalar(name='h_%s' % self.name))
+    def __new__(cls, name, **kwargs):
+        newobj = sympy.Symbol.__new__(cls, name)
+        newobj._reverse = kwargs.get('reverse', False)
+        newobj._spacing = kwargs.get('spacing', Scalar(name='h_%s' % name))
+        return newobj
 
     def __str__(self):
         return self.name
@@ -83,6 +86,10 @@ class Dimension(Symbol, DimensionArgProvider):
         # at construction time. This is a symptom we need local and global dimensions
         self._reverse = val
 
+    @property
+    def base(self):
+        return self
+
     def _hashable_content(self):
         return super(Dimension, self)._hashable_content() +\
             (self.reverse, self.spacing)
@@ -132,16 +139,15 @@ class SteppingDimension(Dimension):
     :param parent: Parent dimension over which to loop in modulo fashion.
     """
 
-    def __init__(self, *args, **kwargs):
-        if not self._cached():
-            super(SteppingDimension, self).__init__(*args, **kwargs)
-            self._modulo = kwargs.get('modulo', 2)
-            self._parent = kwargs['parent']
-
-            # Inherit time/space identifiers
-            assert isinstance(self.parent, Dimension)
-            self.is_Time = self.parent.is_Time
-            self.is_Space = self.parent.is_Space
+    def __new__(cls, name, parent, **kwargs):
+        newobj = sympy.Symbol.__new__(cls, name)
+        assert isinstance(parent, Dimension)
+        newobj._modulo = kwargs.get('modulo', 2)
+        newobj._parent = parent
+        # Inherit time/space identifiers
+        newobj.is_Time = parent.is_Time
+        newobj.is_Space = parent.is_Space
+        return newobj
 
     @property
     def parent(self):
@@ -177,15 +183,13 @@ class LoweredDimension(Dimension):
     Dimension symbol representing a modulo iteration created when
     resolving a :class:`SteppingDimension`.
 
-    :param stepping: :class:`SteppingDimension` from which this
-                     :class:`Dimension` originated.
-    :param offset: Offset value used in the modulo iteration.
+    :param origin: The expression mapped to this dimension.
     """
 
-    def __init__(self, *args, **kwargs):
-        if not self._cached():
-            super(LoweredDimension, self).__init__(*args, **kwargs)
-            self._origin = kwargs['origin']
+    def __new__(cls, name, origin, **kwargs):
+        newobj = sympy.Symbol.__new__(cls, name)
+        newobj._origin = origin
+        return newobj
 
     @property
     def origin(self):
