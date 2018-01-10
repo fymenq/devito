@@ -14,14 +14,14 @@ import cgen as c
 
 from devito.cgen_utils import blankline, ccode
 from devito.exceptions import VisitorException
-from devito.ir.iet.nodes import Iteration, Node
+from devito.ir.iet.nodes import Node
 from devito.tools import as_tuple, filter_sorted, flatten, ctypes_to_C
 
 
 __all__ = ['FindNodes', 'FindSections', 'FindSymbols', 'MapExpressions',
            'IsPerfectIteration', 'SubstituteExpression', 'printAST', 'CGen',
            'Transformer', 'NestedTransformer', 'FindAdjacentIterations',
-           'MergeOuterIterations', 'MapIteration']
+           'MapIteration']
 
 
 class Visitor(object):
@@ -689,56 +689,6 @@ class SubstituteExpression(Transformer):
     def visit_Expression(self, o):
         o.substitute(self.subs)
         return o._rebuild(expr=o.expr)
-
-
-class MergeOuterIterations(Transformer):
-    """
-    :class:`Transformer` that merges subsequent :class:`Iteration`
-    objects iff their dimenions agree.
-    """
-
-    def is_mergable(self, iter1, iter2):
-        """Defines if two :class:`Iteration` objects are mergeable.
-
-        Note: This currently does not(!) consider data dependencies
-        between the loops. A deeper analysis is required for this that
-        will be added soon.
-        """
-        if iter1.dim.is_Stepping:
-            # Aliasing only works one-way because we left-merge
-            if iter1.dim.parent == iter2.dim:
-                return True
-            if iter2.dim.is_Stepping and iter1.dim.parent == iter2.dim.parent:
-                return True
-        return iter1.dim == iter2.dim and iter1.bounds_symbolic == iter2.bounds_symbolic
-
-    def merge(self, iter1, iter2):
-        """Creates a new merged :class:`Iteration` object from two
-        loops along the same dimension.
-        """
-        newexpr = iter1.nodes + iter2.nodes
-        return Iteration(newexpr, dimension=iter1.dim,
-                         limits=iter1.limits,
-                         offsets=iter1.offsets)
-
-    def visit_Iteration(self, o):
-        rebuilt = self.visit(o.children)
-        ret = o._rebuild(*rebuilt, **o.args_frozen)
-        return ret
-
-    def visit_list(self, o):
-        head = self.visit(o[0])
-        if len(o) < 2:
-            return tuple([head])
-        body = self.visit(o[1:])
-        if head.is_Iteration and body[0].is_Iteration:
-            if self.is_mergable(head, body[0]):
-                newit = self.merge(head, body[0])
-                ret = self.visit([newit] + list(body[1:]))
-                return as_tuple(ret)
-        return tuple([head] + list(body))
-
-    visit_tuple = visit_list
 
 
 def printAST(node, verbose=True):
